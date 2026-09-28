@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 import re
 import shutil
+import functools
 import subprocess
 import tempfile
 from .common import (
@@ -787,6 +788,41 @@ def _scene_cuts_from_diffs(diffs: List[Tuple[float, float]]) -> List[float]:
     return cuts
 
 
+def _refine_scene_cut(
+    input_path: Path, cut_time: float, window: float, fps: float = 30.0
+) -> float:
+    """Locate a sampled scene cut to within one frame.
+
+    A cut reported at sample time ``t`` happened somewhere in ``(t - window, t]``.
+    Decoding just that span at full frame rate and taking the largest
+    frame-to-frame change pins it down, so the crop can switch on the edit
+    frame instead of up to a sampling interval late.
+    """
+    start = max(0.0, cut_time - window - 0.05)
+    command = [
+        "ffmpeg", "-v", "error", "-ss", f"{start:.3f}", "-t", f"{window + 0.1:.3f}",
+        "-i", str(input_path), "-an", "-sn",
+        "-vf", f"fps={fps:.3f},scale=32:18", "-pix_fmt", "gray", "-f", "rawvideo", "-",
+    ]
+    try:
+        raw = subprocess.run(command, capture_output=True, timeout=30, check=True).stdout
+    except Exception as exc:
+        logger.debug("Scene cut refinement failed at %.2fs (%s)", cut_time, exc)
+        return cut_time
+    frame_size = 32 * 18
+    count = len(raw) // frame_size
+    if count < 3:
+        return cut_time
+    frames = np.frombuffer(raw[: count * frame_size], dtype=np.uint8)
+    frames = frames.reshape(count, frame_size).astype(np.int16)
+    diffs = np.abs(np.diff(frames, axis=0)).mean(axis=1)
+    peak = int(np.argmax(diffs))
+    # A cut stands far above the frame-to-frame noise; otherwise keep the estimate.
+    if diffs[peak] < max(8.0, 4.0 * float(np.median(diffs))):
+        return cut_time
+    return start + (peak + 1) / fps
+
+
 def analyze_vertical_clip(
     input_path: Path,
     *,
@@ -858,7 +894,11 @@ def analyze_vertical_clip(
             except Exception:
                 pass
 
-    return track, _scene_cuts_from_diffs(diffs)
+    scene_cuts = [
+        _refine_scene_cut(input_path, cut, 1.0 / sample_fps)
+        for cut in _scene_cuts_from_diffs(diffs)
+    ]
+    return track, scene_cuts
 
 
 def _median_filter(values: List[float], window: int = 3) -> List[float]:
@@ -875,36 +915,19 @@ def _median_filter(values: List[float], window: int = 3) -> List[float]:
     return out
 
 
-def build_crop_trajectory(
-    track: List[Tuple[float, Optional[float], float]],
+def _ease_crop_positions(
+    times: List[float],
+    centers: List[Optional[float]],
     width: int,
     crop_w: int,
+    max_x: int,
     *,
-    deadzone_frac: float = 0.05,
-    smooth_time: float = 0.9,
-    max_pan_speed_frac: float = 0.4,
-) -> List[Tuple[float, int]]:
-    """Turn a raw face-centre track into a smooth, eased crop-x trajectory.
-
-    Returns keyframes [(t, x)] for the crop's left edge. The motion is produced
-    by a critically-damped spring (Unity-style SmoothDamp) easing toward a
-    comfort-zone target, which gives natural ease-in/ease-out with no overshoot
-    and no mechanical ramp-then-stop feel. A deadzone keeps the frame still for
-    small head movements; a median pre-filter removes detection spikes. Returns
-    [] when there isn't enough signal to track.
-    """
-    if not track:
-        return []
-    max_x = max(0, width - crop_w)
-    if max_x <= 0:
-        return []
-
-    centers: List[Optional[float]] = [c for _, c, _ in track]
-    times = [t for t, _, _ in track]
-    detected = sum(1 for c in centers if c is not None)
-    if detected < max(3, len(centers) // 5):
-        return []  # too sparse to trust — caller falls back to a static crop
-
+    deadzone_frac: float,
+    smooth_time: float,
+    max_pan_speed_frac: float,
+) -> Optional[List[float]]:
+    """Eased crop-x positions for one continuous shot, or None if it has no face."""
+    centers = list(centers)
     # Gap-fill missing detections: forward fill, then back fill.
     last: Optional[float] = None
     for i in range(len(centers)):
@@ -919,7 +942,7 @@ def build_crop_trajectory(
         else:
             last = centers[i]
     if any(c is None for c in centers):
-        return []
+        return None
 
     desired = [min(max(c - crop_w / 2.0, 0.0), float(max_x)) for c in centers]
     desired = _median_filter(desired, window=3)
@@ -967,27 +990,129 @@ def build_crop_trajectory(
 
     # Final low-pass pass: removes residual velocity steps so the piecewise-
     # linear keyframes read as continuous, fluid motion.
-    eased = smooth_values(eased, window=5)
+    return smooth_values(eased, window=5)
 
-    # Keep keyframes fine enough that linear interpolation tracks the smooth
-    # curve without visible faceting.
+
+# ffmpeg's expression parser limits nesting depth, and the crop expression
+# nests one if() per keyframe.
+MAX_CROP_KEYFRAMES = 90
+
+
+def _shot_ranges(
+    times: List[float], scene_cuts: List[float]
+) -> List[Tuple[int, int, float, Optional[float]]]:
+    """Split sample indices at scene cuts into (start, end, start_time, cut) shots."""
+    shots: List[Tuple[int, int, float, Optional[float]]] = []
+    start, start_time, shot_cut = 0, 0.0, None
+    for cut in scene_cuts:
+        boundary = next((i for i, t in enumerate(times) if t >= cut), len(times))
+        if boundary <= start or boundary >= len(times):
+            continue
+        shots.append((start, boundary, start_time, shot_cut))
+        # The edit falls between the previous shot's last sample and this one.
+        start_time = min(max(cut, times[boundary - 1] + 0.002), times[boundary])
+        start, shot_cut = boundary, cut
+    shots.append((start, len(times), start_time, shot_cut))
+    return shots
+
+
+def build_crop_trajectory(
+    track: List[Tuple[float, Optional[float], float]],
+    width: int,
+    crop_w: int,
+    *,
+    scene_cuts: Optional[List[float]] = None,
+    deadzone_frac: float = 0.05,
+    smooth_time: float = 0.9,
+    max_pan_speed_frac: float = 0.4,
+) -> List[Tuple[float, int]]:
+    """Turn a raw face-centre track into a smooth, eased crop-x trajectory.
+
+    Returns keyframes [(t, x)] for the crop's left edge. The motion is produced
+    by a critically-damped spring (Unity-style SmoothDamp) easing toward a
+    comfort-zone target, which gives natural ease-in/ease-out with no overshoot
+    and no mechanical ramp-then-stop feel. A deadzone keeps the frame still for
+    small head movements; a median pre-filter removes detection spikes. Each
+    shot between ``scene_cuts`` is eased on its own and the crop switches on
+    the edit, so a camera change never pans through the old shot's framing.
+    Returns [] when there isn't enough signal to track.
+    """
+    if not track:
+        return []
+    max_x = max(0, width - crop_w)
+    if max_x <= 0:
+        return []
+
+    centers: List[Optional[float]] = [c for _, c, _ in track]
+    times = [t for t, _, _ in track]
+    detected = sum(1 for c in centers if c is not None)
+    if detected < max(3, len(centers) // 5):
+        return []  # too sparse to trust — caller falls back to a static crop
+
+    ease = functools.partial(
+        _ease_crop_positions,
+        width=width,
+        crop_w=crop_w,
+        max_x=max_x,
+        deadzone_frac=deadzone_frac,
+        smooth_time=smooth_time,
+        max_pan_speed_frac=max_pan_speed_frac,
+    )
+    cuts = sorted(scene_cuts or [])
+    while True:
+        shots = _shot_ranges(times, cuts)
+        eased_shots = [ease(times[lo:hi], centers[lo:hi]) for lo, hi, _, _ in shots]
+        # A shot without a detected face keeps the neighbouring shot's framing.
+        for i, eased in enumerate(eased_shots):
+            if eased is None:
+                fill = next(
+                    (e[-1] for e in reversed(eased_shots[:i]) if e is not None), None
+                )
+                if fill is None:
+                    fill = next(e[0] for e in eased_shots[i + 1 :] if e is not None)
+                lo, hi, _, _ = shots[i]
+                eased_shots[i] = [fill] * (hi - lo)
+
+        keys = _crop_keyframes(times, shots, eased_shots, crop_w, width)
+        if len(keys) <= MAX_CROP_KEYFRAMES or len(shots) == 1:
+            return keys
+        # Too many edits for one crop expression: keep the biggest reframes and
+        # let the camera change with the smallest jump ease like before.
+        jumps = [
+            abs(eased_shots[k][0] - eased_shots[k - 1][-1])
+            for k in range(1, len(shots))
+        ]
+        cuts.remove(shots[1 + jumps.index(min(jumps))][3])
+
+
+def _crop_keyframes(
+    times: List[float],
+    shots: List[Tuple[int, int, float, Optional[float]]],
+    eased_shots: List[List[float]],
+    crop_w: int,
+    width: int,
+) -> List[Tuple[float, int]]:
+    """Keyframes fine enough that linear interpolation tracks the eased curve."""
+
     def simplify(tol: float) -> List[Tuple[float, int]]:
-        keys: List[Tuple[float, int]] = [(0.0, int(round(eased[0])))]
-        for i in range(1, len(eased)):
-            if abs(eased[i] - keys[-1][1]) >= tol:
-                keys.append((times[i], int(round(eased[i]))))
-        if keys[-1][0] < times[-1]:
-            keys.append((times[-1], int(round(eased[-1]))))
+        keys: List[Tuple[float, int]] = []
+        for (lo, hi, start_time, _), eased in zip(shots, eased_shots):
+            if keys:
+                # Hold the previous framing until the cut, then switch on it.
+                keys.append((start_time - 0.001, keys[-1][1]))
+            keys.append((start_time, int(round(eased[0]))))
+            for i in range(1, len(eased)):
+                if abs(eased[i] - keys[-1][1]) >= tol:
+                    keys.append((times[lo + i], int(round(eased[i]))))
+            if keys[-1][0] < times[hi - 1]:
+                keys.append((times[hi - 1], int(round(eased[-1]))))
         return keys
 
     tol = max(1.5, crop_w * 0.006)
     keys = simplify(tol)
-    while len(keys) > 90:
+    while len(keys) > MAX_CROP_KEYFRAMES and tol < width:
         tol *= 1.5
         keys = simplify(tol)
-
-    if keys and keys[0][0] > 0.0:
-        keys[0] = (0.0, keys[0][1])
     return keys
 
 
@@ -1186,7 +1311,11 @@ def build_vertical_filter_plan(
         logger.warning("Clip analysis failed (%s); using static crop", exc)
         track, scene_cuts = [], []
 
-    keys = build_crop_trajectory(track, width, crop_w) if track else []
+    keys = (
+        build_crop_trajectory(track, width, crop_w, scene_cuts=scene_cuts)
+        if track
+        else []
+    )
     moving = bool(keys and trajectory_has_movement(keys, crop_w))
     static_x = 0
     if moving:
