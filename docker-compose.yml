@@ -18,7 +18,9 @@ services:
         - NEXT_PUBLIC_DATAFAST_ALLOW_LOCALHOST=${NEXT_PUBLIC_DATAFAST_ALLOW_LOCALHOST:-false}
     container_name: supoclip-frontend
     ports:
-      - "127.0.0.1:3001:3107"
+      # Host and container ports must match: Better Auth trusted origins, CORS
+      # and NEXT_PUBLIC_APP_URL all default to http://localhost:3107.
+      - "127.0.0.1:3107:3107"
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
@@ -166,7 +168,8 @@ services:
       - SUPOCLIP_MCP_TRANSPORT=${SUPOCLIP_MCP_TRANSPORT:-sse}
       - SUPOCLIP_MCP_HOST=0.0.0.0
       - SUPOCLIP_MCP_PORT=9100
-      - SUPOCLIP_MCP_PUBLIC_URL=${SUPOCLIP_MCP_PUBLIC_URL:-https://mcp.supoclip.com}
+      # Set to your public https URL when serving the MCP behind a reverse proxy.
+      - SUPOCLIP_MCP_PUBLIC_URL=${SUPOCLIP_MCP_PUBLIC_URL:-http://localhost:${SUPOCLIP_MCP_PORT:-9100}}
       - SUPOCLIP_MCP_REQUIRE_BEARER_AUTH=${SUPOCLIP_MCP_REQUIRE_BEARER_AUTH:-true}
     restart: unless-stopped
     depends_on:

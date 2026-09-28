@@ -84,21 +84,23 @@ You should see these services:
 - `supoclip-frontend`
 - `supoclip-backend`
 - `supoclip-worker`
+- `supoclip-mcp`
 - `supoclip-postgres`
 - `supoclip-redis`
 
 ### 5. Open the application
 
-- Frontend: `http://localhost:3000`
+- Frontend: `http://localhost:3107`
 - Backend API: `http://localhost:8000`
 - FastAPI docs: `http://localhost:8000/docs`
+- MCP server (SSE): `http://localhost:9100/sse`
 
 ## What Docker Starts
 
-The default Compose stack contains five services:
+The default Compose stack contains six services:
 
 - `frontend`
-  - Next.js application on port `3000`
+  - Next.js application on port `3107`
   - Proxies authenticated requests to the backend
 - `backend`
   - FastAPI API on port `8000`
@@ -110,12 +112,15 @@ The default Compose stack contains five services:
   - Stores users, sessions, tasks, sources, clips, billing metadata, and auth rotation state
 - `redis`
   - Backs the job queue and progress event flow
+- `mcp`
+  - MCP server for Claude, Cursor and other MCP clients (SSE on port `9100`)
+  - Authenticates clients with a SupoClip API key as the Bearer token
 
 ## First-Run Checklist
 
 After the stack is up:
 
-1. Load the homepage at `http://localhost:3000`.
+1. Load the homepage at `http://localhost:3107`.
 2. Create an account or sign in.
 3. Submit a YouTube URL or upload a video file.
 4. Open the task page and confirm progress updates appear.

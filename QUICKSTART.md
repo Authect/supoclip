@@ -61,7 +61,7 @@ LLM=openai:gpt-4
 
 ### 3. Access the Application
 
-- **Frontend**: http://localhost:3000
+- **Frontend**: http://localhost:3107
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
 
@@ -198,12 +198,14 @@ docker-compose up -d
 
 ## Architecture
 
-SupoClip runs 4 Docker containers:
+SupoClip runs 6 Docker containers:
 
-1. **Frontend** (Next.js 15) - Port 3000
+1. **Frontend** (Next.js 15) - Port 3107
 2. **Backend** (FastAPI + Python) - Port 8000
-3. **PostgreSQL** - Port 5432
-4. **Redis** - Port 6379
+3. **Worker** (ARQ) - processes video jobs from Redis
+4. **MCP server** - Port 9100 (SSE)
+5. **PostgreSQL** - Port 5432
+6. **Redis** - Port 6379
 
 All services are connected via a Docker network and start automatically with proper health checks.
 
