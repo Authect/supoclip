@@ -146,6 +146,18 @@ async def test_create_task_rejects_non_upload_local_paths(client, db_session, au
 
 
 @pytest.mark.asyncio
+async def test_transitions_list_does_not_expose_server_paths(client):
+    response = await client.get("/transitions")
+
+    assert response.status_code == 200
+    transitions = response.json()["transitions"]
+    assert transitions
+    for transition in transitions:
+        assert "file_path" not in transition
+        assert transition["filename"] == f"{transition['name']}.mp4"
+
+
+@pytest.mark.asyncio
 async def test_legacy_public_clips_mount_is_not_available(client):
     response = await client.get("/clips/seeded.mp4")
 

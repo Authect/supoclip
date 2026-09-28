@@ -412,6 +412,8 @@ class TaskService(ClipEditingMixin):
                         self.db, clip_id
                     )
                     if clip_record:
+                        # Like the REST clip listing, never send server paths to clients.
+                        clip_record.pop("file_path", None)
                         await clip_ready_callback(i, total_clips, clip_record)
 
             stage_timings["render_seconds"] = round(

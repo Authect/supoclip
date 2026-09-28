@@ -129,3 +129,25 @@ async def test_cancel_between_insert_and_commit_rolls_back_clip(db_session, tmp_
     assert list(current["generated_clips_ids"]) == []
     assert await ClipRepository.get_clips_by_task(db_session, task_id) == []
     assert not clip_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_clip_ready_events_do_not_expose_server_paths(
+    db_session, initialized_database, tmp_path
+):
+    task_id, _, original = await make_task(db_session, tmp_path, status="queued")
+    sessions = async_sessionmaker(initialized_database, expire_on_commit=False)
+
+    async with sessions() as worker:
+        service, clip_path, _ = setup_worker(worker, tmp_path, original)
+        ready = AsyncMock()
+        await service.process_task(
+            task_id, "upload://input.mp4", "upload",
+            should_cancel=AsyncMock(return_value=False),
+            progress_callback=AsyncMock(), clip_ready_callback=ready,
+        )
+
+    ready.assert_awaited_once()
+    clip_payload = ready.await_args.args[2]
+    assert clip_payload["filename"] == clip_path.name
+    assert "file_path" not in clip_payload

@@ -228,7 +228,8 @@ async def get_available_transitions():
                     "display_name": transition_file.stem.replace("_", " ")
                     .replace("-", " ")
                     .title(),
-                    "file_path": transition_path,
+                    # Public endpoint: expose the file name, not the server path.
+                    "filename": transition_file.name,
                 }
             )
 

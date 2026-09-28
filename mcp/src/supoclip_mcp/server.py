@@ -251,7 +251,7 @@ async def supoclip_list_transitions() -> str:
     """List available video transition effects. No auth required.
 
     Returns:
-        str: JSON ``{"transitions": [{"name", "display_name", "file_path"}]}``.
+        str: JSON ``{"transitions": [{"name", "display_name", "filename"}]}``.
     """
     data = await _client().request("GET", "/transitions", authenticated=False)
     return _json(data)
