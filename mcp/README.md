@@ -1,9 +1,9 @@
 # SupoClip MCP Server
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for
-[SupoClip](https://supoclip.com) — turn long-form videos (YouTube links or
-direct URLs) into short, vertical, subtitled viral clips from any MCP client
-(Claude Desktop, Claude Code, Cursor, etc.).
+[SupoClip](https://supoclip.com) — turn long-form videos (YouTube links, or
+files uploaded to your SupoClip backend) into short, vertical, subtitled viral
+clips from any MCP client (Claude Desktop, Claude Code, Cursor, etc.).
 
 By default it talks to the **official hosted SupoClip API** at
 `https://api.supoclip.com`. Point it at your own deployment by setting
@@ -102,7 +102,17 @@ Token: sk_your_supoclip_api_key
 ```
 
 With Docker Compose, the `mcp` service runs this mode by default and binds to
-`127.0.0.1:9100` for a reverse proxy.
+`127.0.0.1:9100`. On a self-hosted stack, create an API key at
+`http://localhost:3107/settings/api-keys` and connect Claude Code with:
+
+```bash
+claude mcp add --transport sse supoclip http://localhost:9100/sse \
+  --header "Authorization: Bearer sk_your_supoclip_api_key"
+```
+
+Set `SUPOCLIP_MCP_TRANSPORT=http` to serve streamable HTTP at
+`http://localhost:9100/mcp` instead (use `--transport http` with that URL).
+Behind a reverse proxy, set `SUPOCLIP_MCP_PUBLIC_URL` to the public https URL.
 
 ## Use with Claude Desktop / Claude Code
 

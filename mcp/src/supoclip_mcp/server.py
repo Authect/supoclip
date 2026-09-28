@@ -372,7 +372,8 @@ async def supoclip_create_clip_task(
     may be required (a 402 error indicates this — see ``supoclip_billing_summary``).
 
     Args:
-        url: YouTube or direct video URL to clip.
+        url: YouTube URL to clip, or an ``upload://`` reference returned by the
+            backend's ``POST /upload`` endpoint. Other URLs are rejected.
         title: Optional task title.
         processing_mode: 'fast' | 'balanced' | 'quality'.
         output_format: 'vertical' | 'vertical_pan' | 'vertical_split' | 'original'.
@@ -387,7 +388,7 @@ async def supoclip_create_clip_task(
     """
     cleaned_url = (url or "").strip()
     if len(cleaned_url) < 4:
-        raise SupoClipError("url is required. Pass a YouTube URL or direct video URL.")
+        raise SupoClipError("url is required. Pass a YouTube URL or an upload:// reference.")
 
     normalized_mode = processing_mode if processing_mode in {"fast", "balanced", "quality"} else "fast"
     normalized_format = output_format if output_format in VALID_OUTPUT_FORMATS else "vertical"
@@ -439,7 +440,7 @@ async def supoclip_create_clip_task(
 )
 @tool_errors
 async def supoclip_create_clip(url: str = "") -> str:
-    """Create a SupoClip task from a YouTube or direct video URL.
+    """Create a SupoClip task from a YouTube URL or an upload:// reference.
 
     This is a compatibility alias for clients that fail to pass arguments to
     the richer ``supoclip_create_clip_task`` tool. Pass the video URL in the
