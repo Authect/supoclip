@@ -239,7 +239,7 @@ class Config:
         if self.openai_api_key:
             return "openai:gpt-5.2"
         if self.anthropic_api_key:
-            return "anthropic:claude-4-sonnet"
+            return "anthropic:claude-sonnet-5"
         return "google-gla:gemini-3-flash-preview"
 
 

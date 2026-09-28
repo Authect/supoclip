@@ -23,6 +23,10 @@ IDEAL_CLIP_MIN_SECONDS = 25
 IDEAL_CLIP_MAX_SECONDS = 50
 MIN_ACCEPTED_CLIP_SECONDS = 15
 MAX_ACCEPTED_CLIP_SECONDS = 60
+# pydantic-ai caps Anthropic responses at 4096 tokens. Current Claude models
+# think by default and thinking counts toward max_tokens, so the structured
+# analysis of a long transcript could be cut off at that cap.
+ANTHROPIC_ANALYSIS_MAX_TOKENS = 16000
 TRANSCRIPT_ANALYSIS_CACHE_VERSION = "hook-titles-v5-grounded"
 HOOK_TITLE_MAX_CHARS = 64
 HOOK_TITLE_MAX_WORDS = 10
@@ -460,6 +464,11 @@ def get_transcript_agent() -> Agent[None, TranscriptAnalysis]:
             # prose before settling on schema-valid JSON. Keep retries limited
             # while still allowing enough repair attempts for local models.
             output_retries=2 if provider == "ollama" else 2,
+            model_settings=(
+                {"max_tokens": ANTHROPIC_ANALYSIS_MAX_TOKENS}
+                if provider == "anthropic"
+                else None
+            ),
         )
         _transcript_agent_signature = signature
     return _transcript_agent

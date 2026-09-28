@@ -135,16 +135,14 @@ The billing flow sends:
 
 ### OpenAI (Recommended)
 ```bash
-LLM=openai:gpt-4
-LLM=openai:gpt-4-turbo
-LLM=openai:gpt-3.5-turbo
+LLM=openai:gpt-5.2
 ```
 
 ### Anthropic
 ```bash
-LLM=anthropic:claude-3-5-sonnet-20241022
-LLM=anthropic:claude-3-opus
-LLM=anthropic:claude-3-haiku
+LLM=anthropic:claude-sonnet-5
+LLM=anthropic:claude-opus-5
+LLM=anthropic:claude-haiku-4-5
 ```
 
 ### Google
