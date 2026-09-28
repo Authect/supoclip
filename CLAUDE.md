@@ -11,14 +11,18 @@ SupoClip is an open-source alternative to OpusClip — an AI-powered video clipp
 ### Docker (recommended)
 
 ```bash
-docker-compose up -d              # Start all 5 services
+docker-compose up -d              # Start all 6 services
 docker-compose up -d --build      # Rebuild after changes
 docker-compose logs -f backend    # Debug backend
 docker-compose logs -f worker     # Debug video processing
 docker-compose down               # Stop all services
 ```
 
-Services: Frontend (:3000), Backend API (:8000, docs at /docs), Worker (ARQ), PostgreSQL (:5432), Redis (:6379)
+Services: Frontend (:3107), Backend API (:8000, docs at /docs), Worker (ARQ), MCP server (:9100, SSE), PostgreSQL (:5432), Redis (:6379)
+
+The frontend's host port must stay equal to the URL in `BETTER_AUTH_URL`/`NEXT_PUBLIC_APP_URL`
+and `CORS_ORIGINS` (all `http://localhost:3107` by default); otherwise Better Auth rejects
+sign-up/sign-in with "Invalid origin" and the backend blocks direct browser uploads.
 
 ### Backend (local)
 
@@ -46,9 +50,20 @@ pnpm run build        # Prisma generate + Next.js build
 pnpm run lint
 ```
 
-### No tests
+### Tests
 
-The project currently has no test files.
+pytest (backend), Vitest (frontend) and Playwright (browser); see `docs/testing-local.md`.
+
+```bash
+make test        # backend pytest (needs Postgres + Redis) + frontend Vitest
+make check       # frontend lint + typecheck
+make test-e2e    # database-backed Playwright smoke tests
+cd frontend && pnpm run test:polish   # mocked-API browser tests incl. the editor studio
+```
+
+The editor studio browser tests play and export H.264 media, which Playwright's
+bundled Chromium cannot decode; run them with Chrome or a distro Chromium
+(`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`).
 
 ## Architecture
 
@@ -82,17 +97,19 @@ utils/               → Thread pool helpers for blocking operations (async_help
 
 ### Video Processing Pipeline
 
-1. **Input** → YouTube URL (yt-dlp) or uploaded file
-2. **Transcription** → AssemblyAI word-level timestamps (cached as `.transcript_cache.json`)
-3. **AI Analysis** → Pydantic AI selects 3-7 viral segments (10-45s each) with virality scoring
-4. **Clip Generation** → MoviePy creates 9:16 clips with:
-   - Face-centered cropping: MediaPipe → OpenCV DNN → Haar cascade (fallback chain)
-   - Word-synced subtitles from AssemblyAI
+1. **Input** → YouTube URL (yt-dlp, optional Apify) or uploaded file (`upload://` reference)
+2. **Transcription** → `TRANSCRIPTION_PROVIDER`: AssemblyAI (default), local Whisper, or YouTube captions; word-level timestamps cached as `.transcript_cache.json`
+3. **AI Analysis** → Pydantic AI selects 2-5 segments (15-60s accepted) with virality scoring; fast mode keeps `FAST_MODE_MAX_CLIPS`
+4. **Clip Generation** → ffmpeg renders 9:16 clips (`media/reframing.py`) with:
+   - Scene-aware layout: tracked face crop for talking-head shots, blurred-background fit for content shots; the crop snaps at scene cuts
+   - Face detection uses MediaPipe's legacy `mp.solutions` API when present, otherwise OpenCV Haar (the locked `mediapipe` release has no `solutions`, so Haar is what runs)
+   - Word-synced subtitles burned in via ASS, caption templates with animation styles
    - Custom fonts (TTF files in `backend/fonts/`)
-   - Optional transition effects (`backend/transitions/`)
-   - Optional B-roll overlays (Pexels API)
-   - Caption templates with animation styles
 5. **Storage** → Clips to `{TEMP_DIR}/clips/`, metadata to PostgreSQL
+
+Not wired into the pipeline: inter-clip transitions are disabled so every clip exports
+standalone (`create_clips_with_transitions`), and B-roll (`broll.py`, `apply_broll_to_clip`)
+has no caller — the `include_broll` task flag is stored but has no effect.
 
 ### Frontend Architecture
 
@@ -120,24 +137,25 @@ PostgreSQL 15. Schema in `init.sql`. Mixed naming conventions:
 |------|---------|
 | `src/main_refactored.py` | Compatibility import for existing deployments |
 | `src/main.py` | Canonical FastAPI application factory |
-| `src/api/routes/tasks.py` | Task CRUD, SSE progress, clip editing endpoints (711 lines) |
+| `src/api/routes/tasks.py` | Task CRUD, SSE progress, clip editing, sharing endpoints |
 | `src/api/routes/media.py` | Fonts, transitions, uploads, templates |
-| `src/services/task_service.py` | Task orchestration, clip editing logic (574 lines) |
+| `src/services/task_service.py` | Task orchestration, clip editing logic |
 | `src/services/video_service.py` | Video download, transcription, AI analysis, clip generation |
 | `src/workers/tasks.py` | ARQ worker task definitions |
 | `src/workers/job_queue.py` | Job queue management |
 | `src/workers/progress.py` | Real-time progress via Redis |
 | `src/ai.py` | Pydantic AI agents, system prompt, segment validation |
-| `src/video_utils.py` | Video processing, cropping, subtitles (~820 lines) |
+| `src/video_utils.py` | Clip rendering entry points, subtitles, hook titles |
+| `src/media/reframing.py` | 9:16 reframing: face tracking, scene cuts, layout plan, crop trajectory |
 | `src/clip_editor.py` | Clip trim, split, merge, export presets |
-| `src/broll.py` | Pexels API B-roll integration |
+| `src/broll.py` | Pexels API B-roll client (not yet called by the pipeline) |
 | `src/caption_templates.py` | Caption template system |
 | `src/config.py` | Environment variable configuration |
 
 ## API Endpoints (routes in `api/routes/`)
 
 **Task lifecycle:**
-- `POST /start-with-progress` — Create task, enqueue to worker (returns task_id)
+- `POST /tasks/` — Create task, enqueue to worker (returns task_id)
 - `GET /tasks/` — List user tasks
 - `GET /tasks/{id}` — Get task with clips
 - `GET /tasks/{id}/progress` — SSE real-time progress stream
@@ -154,8 +172,8 @@ PostgreSQL 15. Schema in `init.sql`. Mixed naming conventions:
 
 **Media:**
 - `GET /fonts`, `GET /transitions`, `GET /caption-templates`, `GET /broll/status`
-- `POST /upload` — Upload video file
-- `GET /clips/{filename}` — Serve generated clips
+- `POST /upload` — Upload video file (returns an `upload://` reference for `POST /tasks/`)
+- `GET /tasks/{id}/clips/{clip_id}/file` — Serve a generated clip (supports Range requests)
 
 **API keys (programmatic access):**
 - `GET /api-keys/` — List the user's API keys (metadata only)
@@ -193,11 +211,11 @@ BETTER_AUTH_SECRET=...               # Frontend auth secret
 
 ### Adding fonts/transitions
 
-Drop `.ttf` files into `backend/fonts/` or `.mp4` files into `backend/transitions/`. They auto-appear via their respective `GET` endpoints.
+Drop `.ttf` files into `backend/fonts/`; they auto-appear via `GET /fonts`. `.mp4` files in `backend/transitions/` are listed by `GET /transitions` but are not applied while inter-clip transitions stay disabled.
 
 ### Modifying AI clip selection
 
-Edit `backend/src/ai.py`: `simplified_system_prompt` controls selection criteria, `TranscriptSegment` defines the output model, `get_most_relevant_parts_by_transcript()` runs analysis with validation.
+Edit `backend/src/ai.py`: `transcript_analysis_system_prompt` and `build_transcript_analysis_prompt()` control selection criteria, `TranscriptSegment` defines the output model, `get_most_relevant_parts_by_transcript()` runs analysis with validation.
 
 ### Video processing constraints
 
@@ -231,4 +249,9 @@ the app via `APP_STORE_ID`/`APP_STORE_URL` in `frontend/src/lib/site.ts`
   signing is enforced).
 - **Tools:** create/list/get/wait/cancel/resume/delete tasks, list/download/
   export clips, and public discovery (templates, transitions, fonts, B-roll).
-- Run with `cd mcp && uv run supoclip-mcp`. Details in `mcp/README.md`.
+  Task sources are YouTube URLs or `upload://` references from `POST /upload`.
+- Run with `cd mcp && uv run supoclip-mcp` (stdio). Docker Compose runs it over
+  SSE at `http://localhost:9100/sse`, requiring a SupoClip API key as the Bearer
+  token. Details in `mcp/README.md`.
+- `mcp[cli]` is pinned below 2.0 in `mcp/pyproject.toml`: SDK 2.x removed the
+  `mcp.server.fastmcp` module the server is built on.
