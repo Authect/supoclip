@@ -128,7 +128,12 @@ class VideoUtilsDiarizationTests(unittest.TestCase):
                 )
             ],
         )
-        with patch(
+        mock_config = SimpleNamespace(
+            transcription_provider="assemblyai",
+            assembly_ai_api_key="test-key",
+            assembly_ai_http_timeout_seconds=900,
+        )
+        with patch("src.media.transcription.get_config", return_value=mock_config), patch(
             "src.media.transcription._submit_and_wait_for_assemblyai_transcript",
             return_value=transcript,
         ):

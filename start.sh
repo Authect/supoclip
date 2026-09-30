@@ -23,10 +23,9 @@ if [ ! -f .env ]; then
     echo "Please create a .env file with your API keys:"
     echo "  1. Copy the template: cp .env.example .env"
     echo "  2. Or use the provided .env file"
-    echo "  3. Edit .env and add your API keys:"
-    echo "     - ASSEMBLY_AI_API_KEY (required)"
-    echo "     - OPENAI_API_KEY or GOOGLE_API_KEY or ANTHROPIC_API_KEY"
-    echo "     - OR set LLM=ollama:<model> (optional: OLLAMA_BASE_URL, OLLAMA_API_KEY)"
+    echo "  3. Edit .env and add your OpenAI API key:"
+    echo "     - OPENAI_API_KEY (picks the clips; transcription runs locally with Whisper)"
+    echo "     - OR another provider's key with a matching LLM, or LLM=ollama:<model>"
     echo ""
     exit 1
 fi
@@ -46,9 +45,22 @@ if [ -n "${LLM:-}" ]; then
     esac
 fi
 
-if [ -z "$ASSEMBLY_AI_API_KEY" ]; then
-    echo -e "${YELLOW}Warning: ASSEMBLY_AI_API_KEY is not set in .env${NC}"
-    echo "Video transcription will not work without this key."
+TRANSCRIPTION_PROVIDER="${TRANSCRIPTION_PROVIDER:-whisper}"
+if [ "$TRANSCRIPTION_PROVIDER" = "assemblyai" ] && [ -z "$ASSEMBLY_AI_API_KEY" ]; then
+    echo -e "${YELLOW}Warning: TRANSCRIPTION_PROVIDER=assemblyai but ASSEMBLY_AI_API_KEY is not set in .env${NC}"
+    echo "Set the key, or use TRANSCRIPTION_PROVIDER=whisper to transcribe locally."
+    echo ""
+fi
+
+# Run local Whisper on the NVIDIA GPU when one is available.
+COMPOSE_FILES=""
+if [ "$TRANSCRIPTION_PROVIDER" = "whisper" ]; then
+    if command -v nvidia-smi > /dev/null 2>&1 && nvidia-smi > /dev/null 2>&1; then
+        COMPOSE_FILES="-f docker-compose.yml -f docker-compose.gpu.yml"
+        echo -e "${GREEN}NVIDIA GPU found: Whisper will transcribe on the GPU.${NC}"
+    else
+        echo -e "${YELLOW}No NVIDIA GPU found: Whisper will transcribe on the CPU (slower).${NC}"
+    fi
     echo ""
 fi
 
@@ -102,7 +114,7 @@ echo "Building and starting Docker containers..."
 echo "(This may take a few minutes on the first run)"
 echo ""
 
-$DOCKER_COMPOSE up -d --build
+$DOCKER_COMPOSE $COMPOSE_FILES up -d --build
 
 echo ""
 echo -e "${GREEN}SupoClip is starting up!${NC}"

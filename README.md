@@ -49,10 +49,10 @@ SupoClip gives you the same core pipeline without the leash:
 
 ## Features
 
-- **AI clip selection** — an LLM (Gemini, GPT, Claude, or a local Ollama model) picks the 3–7 most clip-worthy segments from the transcript
+- **AI clip selection** — an LLM (OpenAI's GPT by default, or Gemini, Claude, or a local Ollama model) picks the 2–5 most clip-worthy segments from the transcript
 - **Virality scoring** — every clip gets hook, engagement, value, and shareability scores
 - **Smart vertical cropping** — face detection keeps the speaker centered in the 9:16 frame
-- **Word-synced subtitles** — AssemblyAI word-level timestamps, custom fonts, caption templates with animation styles
+- **Word-synced subtitles** — word-level timestamps from Whisper running on your machine (or AssemblyAI), custom fonts, caption templates with animation styles
 - **Hook titles** — an AI-written headline burned into the top of each clip's opening seconds
 - **B-roll & transitions** — optional Pexels stock footage overlays and transition effects
 - **Built-in editor** — trim, split, and merge clips, then export with platform presets (TikTok, Reels, Shorts)
@@ -60,28 +60,27 @@ SupoClip gives you the same core pipeline without the leash:
 
 ## Quick Start
 
-You need Docker, an [AssemblyAI](https://www.assemblyai.com/) API key for transcription, and one LLM provider key (Google, OpenAI, Anthropic, or a local Ollama).
+You need Docker and an [OpenAI API key](https://platform.openai.com/api-keys), the only paid service: one request per video picks the clips, costing under a cent per hour of video with the default model. Transcription runs on your machine with Whisper, and an NVIDIA GPU makes it much faster.
 
 ```bash
 git clone https://github.com/FujiwaraChoki/supoclip.git
 cd supoclip
 ```
 
-Create a `.env` in the root with your keys:
+Create a `.env` in the root with your key:
 
 ```env
-ASSEMBLY_AI_API_KEY=your_assemblyai_api_key
-LLM=google-gla:gemini-3-flash-preview
-GOOGLE_API_KEY=your_google_api_key
+OPENAI_API_KEY=your_openai_api_key
 ```
 
-Then start everything:
+Then start everything. With an NVIDIA GPU, add the GPU override so Whisper transcribes on it (`./start.sh` does this automatically):
 
 ```bash
-docker-compose up -d
+docker-compose up -d                                                  # CPU
+docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d  # NVIDIA GPU
 ```
 
-First startup takes a few minutes; watch it with `docker-compose logs -f`. Once healthy, open [http://localhost:3107](http://localhost:3107), create an account, and start clipping. The backend API lives at [http://localhost:8000](http://localhost:8000) with interactive docs at `/docs`.
+First startup takes a few minutes, and the first video also downloads the Whisper model (about 1.6 GB); watch it with `docker-compose logs -f`. Once healthy, open [http://localhost:3107](http://localhost:3107), create an account, and start clipping. The backend API lives at [http://localhost:8000](http://localhost:8000) with interactive docs at `/docs`.
 
 To use a different LLM provider, self-host with Ollama, or configure the optional pieces (B-roll, analytics, emails, YouTube metadata), see the [configuration guide](docs/configuration.md). If something misbehaves, the [troubleshooting guide](docs/troubleshooting.md) covers the common failure modes.
 

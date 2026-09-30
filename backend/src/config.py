@@ -19,9 +19,9 @@ class Config:
         self.ollama_base_url = self._get_runtime_setting("OLLAMA_BASE_URL")
         self.ollama_api_key = self._get_runtime_setting("OLLAMA_API_KEY")
 
-        self.whisper_model = os.getenv("WHISPER_MODEL") or os.getenv("WHISPER_MODEL_SIZE", "base")
+        self.whisper_model = os.getenv("WHISPER_MODEL") or os.getenv("WHISPER_MODEL_SIZE", "turbo")
         self.transcription_provider = self._normalize_transcription_provider(
-            os.getenv("TRANSCRIPTION_PROVIDER", "assemblyai")
+            os.getenv("TRANSCRIPTION_PROVIDER", "whisper")
         )
         self.llm = self._get_runtime_setting("LLM") or self._infer_default_llm()
         self.assembly_ai_api_key = self._get_runtime_setting("ASSEMBLY_AI_API_KEY")
@@ -121,7 +121,7 @@ class Config:
         self.discord_feedback_webhook_url = self._get_optional_env("DISCORD_FEEDBACK_WEBHOOK_URL")
         self.discord_sales_webhook_url = self._get_optional_env("DISCORD_SALES_WEBHOOK_URL")
         self.default_processing_mode = os.getenv("DEFAULT_PROCESSING_MODE", "fast")
-        self.fast_mode_max_clips = int(os.getenv("FAST_MODE_MAX_CLIPS", "4"))
+        self.fast_mode_max_clips = int(os.getenv("FAST_MODE_MAX_CLIPS", "5"))
         self.fast_mode_transcript_model = os.getenv(
             "FAST_MODE_TRANSCRIPT_MODEL", "universal"
         )
@@ -232,15 +232,16 @@ class Config:
     def _infer_default_llm(self) -> str:
         """
         Infer a usable default model based on whichever API key is present.
-        Falls back to Google for backward compatibility.
+        OpenAI comes first: clip selection is one request per video, and its
+        lowest-cost model keeps that under a cent per hour of video.
         """
+        if self.openai_api_key:
+            return "openai:gpt-6-luna"
         if self.google_api_key:
             return "google-gla:gemini-3-flash-preview"
-        if self.openai_api_key:
-            return "openai:gpt-5.2"
         if self.anthropic_api_key:
             return "anthropic:claude-sonnet-5"
-        return "google-gla:gemini-3-flash-preview"
+        return "openai:gpt-6-luna"
 
 
 def get_config() -> Config:

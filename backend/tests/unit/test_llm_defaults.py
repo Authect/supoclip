@@ -21,6 +21,20 @@ def test_anthropic_key_alone_defaults_to_a_current_claude_model(monkeypatch):
     assert Config().llm == "anthropic:claude-sonnet-5"
 
 
+def test_openai_key_defaults_to_the_low_cost_openai_model(monkeypatch):
+    _isolate_llm_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")  # e.g. for YouTube metadata
+
+    assert Config().llm == "openai:gpt-6-luna"
+
+
+def test_missing_keys_point_at_openai(monkeypatch):
+    _isolate_llm_env(monkeypatch)
+
+    assert Config().llm == "openai:gpt-6-luna"
+
+
 def test_transcript_agent_raises_output_budget_only_for_anthropic(monkeypatch):
     _isolate_llm_env(monkeypatch)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")

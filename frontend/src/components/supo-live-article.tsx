@@ -157,14 +157,14 @@ export function SupoLiveArticle({ post }: { post: BlogPost }) {
           <p>
             Self-hosting gives you control over the application’s infrastructure, storage configuration, and
             maintenance schedule. You can build clipping into an existing production environment and keep a
-            deployment you manage. Transcription and hosted AI providers still receive the data needed for their
+            deployment you manage. Any hosted AI provider you connect still receives the data needed for its
             work, so self-hosting does not mean all processing is offline.
           </p>
           <h3>3. You have a practical choice of AI providers</h3>
           <p>
             SupoClip supports LLM configurations for Google, OpenAI, Anthropic, and local Ollama models.
-            That lets you evaluate providers against your own content and budget. The documented transcription
-            pipeline uses AssemblyAI; using a local LLM does not remove that dependency.
+            That lets you evaluate providers against your own content and budget. Transcription runs locally
+            with Whisper by default, with AssemblyAI as an option.
             See the <a href={`${repository}/blob/main/docs/configuration.md`}>configuration guide</a> for setup options.
           </p>
           <h3>4. Your clipping workflow can grow into your own tools</h3>
@@ -179,7 +179,7 @@ export function SupoLiveArticle({ post }: { post: BlogPost }) {
             <div className="grid gap-4 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
               <div className="rounded-xl border border-emerald-400/40 bg-emerald-400/10 p-5"><Server className="mb-3 h-6 w-6 text-emerald-300" /><h3>Your deployment</h3><ul className="mt-3 space-y-2 text-sm text-zinc-300"><li>Application and source code</li><li>Storage and processing resources</li><li>Editorial customization</li></ul></div>
               <ArrowRight className="mx-auto h-5 w-5 rotate-90 text-zinc-400 sm:rotate-0" aria-hidden="true" />
-              <div className="rounded-xl border border-zinc-700 p-5"><Sparkles className="mb-3 h-6 w-6 text-zinc-300" /><h3>Connected AI services</h3><ul className="mt-3 space-y-2 text-sm text-zinc-300"><li>AssemblyAI transcription</li><li>Hosted LLM or local Ollama</li><li>Provider costs and data flows</li></ul></div>
+              <div className="rounded-xl border border-zinc-700 p-5"><Sparkles className="mb-3 h-6 w-6 text-zinc-300" /><h3>Connected AI services</h3><ul className="mt-3 space-y-2 text-sm text-zinc-300"><li>Optional AssemblyAI transcription</li><li>Hosted LLM or local Ollama</li><li>Provider costs and data flows</li></ul></div>
             </div>
             <div className="mt-5 text-xs leading-6 text-zinc-400">Self-hosting gives you deployment control. It does not make the entire pipeline offline.</div>
           </figure>

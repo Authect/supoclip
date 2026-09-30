@@ -5,13 +5,14 @@ Run SupoClip with Docker in just one command!
 ## Prerequisites
 
 1. **Docker Desktop** installed and running
-2. **API Keys** (get these from the providers):
-   - [AssemblyAI API Key](https://www.assemblyai.com/) (required for transcription)
-   - At least one AI provider:
-      - [OpenAI API Key](https://platform.openai.com/api-keys) (recommended)
-      - [Google AI API Key](https://makersuite.google.com/app/apikey)
-      - [Anthropic API Key](https://console.anthropic.com/)
-      - [Ollama](https://ollama.com/) (local/self-hosted, no API key required for local)
+2. **An [OpenAI API key](https://platform.openai.com/api-keys)**, the only paid
+   service: it picks the clips for under a cent per hour of video (API billing is
+   separate from a ChatGPT subscription). Transcription runs locally with Whisper.
+   - Alternatives: a [Google AI](https://makersuite.google.com/app/apikey) or
+     [Anthropic](https://console.anthropic.com/) key, or a local
+     [Ollama](https://ollama.com/) model with no key at all
+3. **Optional: an NVIDIA GPU** with a driver from the 580 series or newer. Whisper
+   runs on it via `docker-compose.gpu.yml`, which `./start.sh` adds automatically.
 
 ## Quick Start (Single Command)
 
@@ -32,16 +33,17 @@ That's it! The script will:
 Edit the `.env` file in the project root and add your API keys:
 
 ```bash
-# Required for video transcription
-ASSEMBLY_AI_API_KEY=your_assemblyai_key_here
-
-# Choose one AI provider for clip selection
+# Picks the clips (the only required key)
 OPENAI_API_KEY=your_openai_key_here
 
-# Configure which AI model to use
-LLM=openai:gpt-4
+# Which model picks the clips (gpt-6-sol picks better clips, costs more)
+LLM=openai:gpt-6-luna
 
-# OR use Ollama locally
+# Transcription runs locally by default
+# TRANSCRIPTION_PROVIDER=whisper
+# WHISPER_MODEL_SIZE=turbo
+
+# OR use Ollama locally (start Ollama with OLLAMA_CONTEXT_LENGTH=32768)
 # LLM=ollama:gpt-oss:20b
 # OLLAMA_BASE_URL=http://localhost:11434/v1
 
@@ -89,14 +91,15 @@ docker-compose up -d --build
 
 | Variable | Description | Where to Get |
 |----------|-------------|--------------|
-| `ASSEMBLY_AI_API_KEY` | Speech-to-text transcription | https://www.assemblyai.com/ |
-| `LLM` | AI model identifier | e.g., `openai:gpt-5.2` or `ollama:gpt-oss:20b` |
+| `OPENAI_API_KEY` | Clip selection (default provider) | https://platform.openai.com/api-keys |
+| `LLM` | AI model identifier | e.g., `openai:gpt-6-luna` or `ollama:gpt-oss:20b` |
 
 ### Optional Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `WHISPER_MODEL_SIZE` | `medium` | Whisper model size (tiny/base/small/medium/large) |
+| `TRANSCRIPTION_PROVIDER` | `whisper` | `whisper` (local), `assemblyai` (needs `ASSEMBLY_AI_API_KEY`), or `youtube_captions` |
+| `WHISPER_MODEL_SIZE` | `turbo` | Whisper model (tiny/base/small/medium/large-v3/turbo) |
 | `BETTER_AUTH_SECRET` | dev secret | Auth secret (change in production!) |
 | `GOOGLE_API_KEY` | - | For Google Gemini models |
 | `ANTHROPIC_API_KEY` | - | For Claude models |
@@ -135,7 +138,8 @@ The billing flow sends:
 
 ### OpenAI (Recommended)
 ```bash
-LLM=openai:gpt-5.2
+LLM=openai:gpt-6-luna   # default, lowest cost
+LLM=openai:gpt-6-sol    # better picks, costs more
 ```
 
 ### Anthropic

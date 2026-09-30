@@ -24,12 +24,12 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 SETTING_METADATA = {
     "ASSEMBLY_AI_API_KEY": {
         "label": "AssemblyAI API key",
-        "description": "Used for video transcription.",
+        "description": "Used when TRANSCRIPTION_PROVIDER=assemblyai.",
         "input_type": "password",
     },
     "LLM": {
         "label": "LLM model",
-        "description": "Provider and model, for example openai:gpt-5.2.",
+        "description": "Provider and model, for example openai:gpt-6-luna.",
         "input_type": "text",
     },
     "OPENAI_API_KEY": {

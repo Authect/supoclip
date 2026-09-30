@@ -20,6 +20,11 @@ docker-compose down               # Stop all services
 
 Services: Frontend (:3107), Backend API (:8000, docs at /docs), Worker (ARQ), MCP server (:9100, SSE), PostgreSQL (:5432), Redis (:6379)
 
+`docker-compose.gpu.yml` gives the worker an NVIDIA GPU for local Whisper
+(`docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build`;
+`./start.sh` adds it when `nvidia-smi` works). The worker's PyTorch is built for
+CUDA 13, so the host needs an NVIDIA driver from the 580 series or newer.
+
 The frontend's host port must stay equal to the URL in `BETTER_AUTH_URL`/`NEXT_PUBLIC_APP_URL`
 and `CORS_ORIGINS` (all `http://localhost:3107` by default); otherwise Better Auth rejects
 sign-up/sign-in with "Invalid origin" and the backend blocks direct browser uploads.
@@ -98,7 +103,7 @@ utils/               → Thread pool helpers for blocking operations (async_help
 ### Video Processing Pipeline
 
 1. **Input** → YouTube URL (yt-dlp, optional Apify) or uploaded file (`upload://` reference)
-2. **Transcription** → `TRANSCRIPTION_PROVIDER`: AssemblyAI (default), local Whisper, or YouTube captions; word-level timestamps cached as `.transcript_cache.json`
+2. **Transcription** → `TRANSCRIPTION_PROVIDER`: local Whisper (default, `WHISPER_MODEL_SIZE=turbo`, one transcription at a time per worker process), AssemblyAI (adds speaker labels), or YouTube captions; word-level timestamps cached as `.transcript_cache.json`
 3. **AI Analysis** → Pydantic AI selects 2-5 segments (15-60s accepted) with virality scoring; fast mode keeps `FAST_MODE_MAX_CLIPS`
 4. **Clip Generation** → ffmpeg renders 9:16 clips (`media/reframing.py`) with:
    - Scene-aware layout: tracked face crop for talking-head shots, blurred-background fit for content shots; the crop snaps at scene cuts
@@ -191,14 +196,17 @@ stored (`api_keys` table). The frontend manages keys at `/settings/api-keys`.
 Required in `.env` (root) or `backend/.env`:
 
 ```bash
-ASSEMBLY_AI_API_KEY=...              # Required: video transcription
-LLM=google-gla:gemini-3-flash-preview # Format: provider:model-name
-GOOGLE_API_KEY=...                   # Or OPENAI_API_KEY / ANTHROPIC_API_KEY
+OPENAI_API_KEY=...                   # Clip selection with the default LLM
+LLM=openai:gpt-6-luna                # Format: provider:model-name
+# Or GOOGLE_API_KEY / ANTHROPIC_API_KEY with a matching LLM
 OLLAMA_BASE_URL=http://localhost:11434/v1  # Optional for ollama:* models
 OLLAMA_API_KEY=...                   # Optional; required for Ollama Cloud
 
 # Optional
-PEXELS_API_KEY=...                   # B-roll stock footage
+TRANSCRIPTION_PROVIDER=whisper       # Default: local Whisper; or assemblyai / youtube_captions
+WHISPER_MODEL_SIZE=turbo             # Default Whisper model
+ASSEMBLY_AI_API_KEY=...              # Only with TRANSCRIPTION_PROVIDER=assemblyai
+PEXELS_API_KEY=...                   # B-roll stock footage (no pipeline caller yet)
 REDIS_HOST=localhost                 # Default: localhost
 REDIS_PORT=6379                      # Default: 6379
 QUEUED_TASK_TIMEOUT_SECONDS=180      # Fail-safe for stuck tasks

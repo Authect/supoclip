@@ -21,22 +21,57 @@ In most cases, edit `.env` and then rebuild or restart the stack.
 
 ### Transcription
 
+Transcription runs on your machine with Whisper by default, so it needs no key.
+
 | Variable | Required | Purpose |
 |---|---|---|
-| `ASSEMBLY_AI_API_KEY` | Yes | Enables word-level transcription used for clip extraction and subtitles |
+| `TRANSCRIPTION_PROVIDER` | No (`whisper`) | `whisper` (local), `assemblyai` (cloud, adds speaker labels), or `youtube_captions` (no word timings) |
+| `WHISPER_MODEL_SIZE` | No (`turbo`) | Whisper model; `turbo` is large-v3-turbo |
+| `ASSEMBLY_AI_API_KEY` | With `assemblyai` | Enables AssemblyAI transcription |
 
 ### LLM selection
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `LLM` | Yes | Selects the provider and model, for example `google-gla:gemini-3-flash-preview` |
+| `LLM` | Recommended | Selects the provider and model, for example `openai:gpt-6-luna` |
 | `OPENAI_API_KEY` | If using OpenAI | Required for `openai:*` models |
 | `GOOGLE_API_KEY` | If using Google | Required for `google-gla:*` models |
 | `ANTHROPIC_API_KEY` | If using Anthropic | Required for `anthropic:*` models |
 | `OLLAMA_BASE_URL` | If using Ollama remotely | Base URL for Ollama-compatible endpoints |
 | `OLLAMA_API_KEY` | Optional | Used for hosted Ollama providers such as Ollama Cloud |
 
-The backend can infer a default LLM from whichever API key is present, but setting `LLM` explicitly is safer and easier to debug.
+The backend can infer a default LLM from whichever API key is present (OpenAI first, as `openai:gpt-6-luna`), but setting `LLM` explicitly is safer and easier to debug.
+
+### Running with only an OpenAI key
+
+With the defaults, the only external API is the one clip-selection request per
+video: roughly 21,000 input tokens for an hour of speech, under a cent with
+`openai:gpt-6-luna`, OpenAI's lowest-cost model (`openai:gpt-6-sol` picks better
+clips for about ten cents). OpenAI models return their picks through Structured
+Outputs, a JSON-schema response format, so they keep their reasoning on. Transcription, cropping, subtitles, rendering and editing all run
+locally. YouTube links are downloaded with `yt-dlp`, and the first video
+downloads the Whisper model once (about 1.6 GB for `turbo`, kept in the
+`whisper_models` volume).
+
+Whisper is much faster on an NVIDIA GPU. The worker image's PyTorch is built
+for CUDA 13, so install an NVIDIA driver from the 580 series or newer (on
+Windows, use Docker Desktop with the WSL 2 backend), then start Compose with
+the GPU override and check that the worker sees the GPU:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+docker compose exec worker .venv/bin/python -c "import torch; print(torch.cuda.is_available())"
+```
+
+Local transcriptions run one at a time, even when several videos are queued.
+
+To remove the OpenAI dependency as well, run a model with Ollama, for example
+`LLM=ollama:gpt-oss:20b`. Start the Ollama server with
+`OLLAMA_CONTEXT_LENGTH=32768`: SupoClip uses Ollama's OpenAI-compatible
+endpoint, which ignores per-request context sizes and defaults to 4,096 tokens
+on GPUs with less than 24 GB, silently cutting off longer transcripts. When
+Ollama shares a GPU with Whisper, also set `OLLAMA_KEEP_ALIVE=0` so the model
+unloads after each request and leaves memory for the next transcription.
 
 ## Core Application Settings
 
@@ -79,9 +114,9 @@ These settings affect clip generation speed, throughput, and defaults.
 | Variable | Default | Purpose |
 |---|---|---|
 | `DEFAULT_PROCESSING_MODE` | `fast` | Default mode for new tasks |
-| `FAST_MODE_MAX_CLIPS` | `4` | Clip cap used by fast mode |
-| `FAST_MODE_TRANSCRIPT_MODEL` | `nano` | Lightweight transcript path for fast mode |
-| `WHISPER_MODEL_SIZE` | `medium` in `.env.example` | Whisper model size when Whisper is used locally |
+| `FAST_MODE_MAX_CLIPS` | `5` | Clip cap used by fast mode (the AI returns 2-5 clips) |
+| `FAST_MODE_TRANSCRIPT_MODEL` | `universal` | AssemblyAI model for fast mode: `universal` uses Universal-3 Pro, `universal-2` (or `nano`) the cheaper Universal-2 |
+| `WHISPER_MODEL_SIZE` | `turbo` | Whisper model when transcribing locally (`WHISPER_MODEL` takes precedence) |
 | `QUEUED_TASK_TIMEOUT_SECONDS` | `180` | Marks stale queued tasks as failed instead of leaving them stuck forever |
 | `MAX_VIDEO_DURATION` | `5400` | Maximum accepted upload length and baseline YouTube length in seconds |
 | `PRO_YOUTUBE_MAX_VIDEO_DURATION` | `5400` | Maximum YouTube length for active or trialing Pro subscriptions, in seconds |
@@ -97,7 +132,7 @@ Current code and defaults emphasize a `fast` mode. If you expose additional mode
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PEXELS_API_KEY` | unset | Enables AI B-roll sourcing from Pexels |
+| `PEXELS_API_KEY` | unset | Pexels key for B-roll (not wired into the clip pipeline yet) |
 
 Fonts and transitions are configured by mounted files rather than environment variables:
 
@@ -231,9 +266,8 @@ docker-compose up -d
 For basic self-hosted use:
 
 ```env
-ASSEMBLY_AI_API_KEY=your_key
-LLM=google-gla:gemini-3-flash-preview
-GOOGLE_API_KEY=your_key
+OPENAI_API_KEY=your_key
+LLM=openai:gpt-6-luna
 BETTER_AUTH_SECRET=replace_me
 SELF_HOST=true
 ```

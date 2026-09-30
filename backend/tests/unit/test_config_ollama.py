@@ -32,3 +32,15 @@ def test_whisper_accepts_documented_model_size_setting(monkeypatch):
     assert Config().whisper_model == "tiny"
     monkeypatch.setenv("WHISPER_MODEL", "base")
     assert Config().whisper_model == "base"
+
+
+def test_transcription_runs_locally_with_whisper_turbo_by_default(monkeypatch):
+    for key in ("TRANSCRIPTION_PROVIDER", "WHISPER_MODEL", "WHISPER_MODEL_SIZE"):
+        monkeypatch.delenv(key, raising=False)
+    config = Config()
+
+    assert config.transcription_provider == "whisper"
+    assert config.whisper_model == "turbo"
+
+    monkeypatch.setenv("TRANSCRIPTION_PROVIDER", "assemblyai")
+    assert Config().transcription_provider == "assemblyai"

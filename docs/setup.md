@@ -11,12 +11,16 @@ This guide covers the recommended Docker setup, local development mode, and the 
 
 ### Required credentials
 
-- `ASSEMBLY_AI_API_KEY`
-- One LLM provider configuration:
+- One LLM provider configuration (OpenAI is the default):
   - `OPENAI_API_KEY` with `LLM=openai:...`
   - `GOOGLE_API_KEY` with `LLM=google-gla:...`
   - `ANTHROPIC_API_KEY` with `LLM=anthropic:...`
   - `LLM=ollama:...` with an available Ollama server, optionally `OLLAMA_BASE_URL`
+
+Transcription runs locally with Whisper by default, so no transcription key is
+needed. `ASSEMBLY_AI_API_KEY` is only required with `TRANSCRIPTION_PROVIDER=assemblyai`.
+An NVIDIA GPU (driver 580 or newer) speeds Whisper up; start Compose with
+`-f docker-compose.yml -f docker-compose.gpu.yml` to use it.
 
 ### Optional credentials
 
@@ -46,9 +50,8 @@ cp .env.example .env
 Then edit `.env` and set at least:
 
 ```env
-ASSEMBLY_AI_API_KEY=your_assemblyai_key
-LLM=google-gla:gemini-3-flash-preview
-GOOGLE_API_KEY=your_google_key
+OPENAI_API_KEY=your_openai_key
+LLM=openai:gpt-6-luna
 BETTER_AUTH_SECRET=replace_this_for_real_use
 BACKEND_AUTH_SECRET=replace_this_if_using_hosted_mode
 

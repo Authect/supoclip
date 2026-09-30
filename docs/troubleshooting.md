@@ -104,7 +104,7 @@ Tasks begin processing and then move to `error`.
 - Invalid API key
 - LLM/provider mismatch
 - YouTube download issue
-- AssemblyAI failure
+- Transcription failure: Whisper model download, GPU driver, or AssemblyAI
 - FFmpeg or media-processing dependency issue
 - Rendering failure caused by fonts or clip options
 
@@ -117,7 +117,10 @@ docker-compose logs -f worker
 
 Verify:
 
-- `ASSEMBLY_AI_API_KEY` is set
+- `TRANSCRIPTION_PROVIDER=assemblyai` has `ASSEMBLY_AI_API_KEY` set; the default
+  `whisper` needs no key but downloads its model on the first video
+- With `docker-compose.gpu.yml`, the worker sees the GPU:
+  `docker compose exec worker .venv/bin/python -c "import torch; print(torch.cuda.is_available())"`
 - `LLM` matches the provider key you supplied
 - The provider account is active and has quota
 
