@@ -10,6 +10,7 @@ from ..config import get_config
 import httpx
 import json
 import re
+import threading
 import time
 from .common import (
     ANALYSIS_LONG_UTTERANCE_MAX_DURATION_MS,
@@ -149,12 +150,19 @@ def _get_whisper_model(model_name: str = "base"):
     return _WHISPER_MODEL_CACHE[model_name]
 
 
+# Worker jobs share one cached model, and Whisper's decoder installs its
+# kv-cache hooks on that shared model, so concurrent transcriptions would mix
+# each other's attention state (and compete for GPU memory). Run one at a time.
+_WHISPER_LOCK = threading.Lock()
+
+
 def transcribe_with_whisper(video_path: Path, model_name: str = "base") -> Dict[str, Any]:
     """Transcribe video using local Whisper with word-level timestamps."""
     audio_path = _prepare_audio_for_transcription(video_path)
-    model = _get_whisper_model(model_name)
-    logger.info("Starting Whisper transcription with model: %s", model_name)
-    return model.transcribe(str(audio_path), word_timestamps=True, language=None)
+    with _WHISPER_LOCK:
+        model = _get_whisper_model(model_name)
+        logger.info("Starting Whisper transcription with model: %s", model_name)
+        return model.transcribe(str(audio_path), word_timestamps=True, language=None)
 
 
 def _whisper_result_to_transcript_data(whisper_result: Dict[str, Any]) -> Dict[str, Any]:
