@@ -8,7 +8,7 @@ import asyncio
 import logging
 import re
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, NativeOutput
 from pydantic_ai.models import Model
 from pydantic_ai.models.ollama import OllamaModel
 from pydantic_ai.providers.ollama import OllamaProvider
@@ -458,7 +458,15 @@ def get_transcript_agent() -> Agent[None, TranscriptAnalysis]:
 
         _transcript_agent = Agent[None, TranscriptAnalysis](
             model=_build_transcript_model(runtime_config),
-            output_type=TranscriptAnalysis,
+            # pydantic-ai returns structured output through a function call by
+            # default, but OpenAI's current models (gpt-6-*) accept function calls
+            # in Chat Completions only with reasoning_effort=none. A JSON-schema
+            # response format keeps their reasoning on.
+            output_type=(
+                NativeOutput(TranscriptAnalysis)
+                if provider == "openai"
+                else TranscriptAnalysis
+            ),
             system_prompt=transcript_analysis_system_prompt,
             # Some local Ollama/OpenAI-compatible endpoints can return formatted
             # prose before settling on schema-valid JSON. Keep retries limited

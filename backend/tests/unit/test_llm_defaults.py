@@ -1,3 +1,9 @@
+import json
+
+import httpx
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+
 from src import ai, config as config_module
 from src.config import Config, set_config_override
 
@@ -33,3 +39,58 @@ def test_transcript_agent_raises_output_budget_only_for_anthropic(monkeypatch):
         assert ai.get_transcript_agent().model_settings is None
     finally:
         set_config_override(None)
+
+
+async def test_openai_clip_selection_asks_for_json_schema_output_not_a_function_call(
+    monkeypatch,
+):
+    # gpt-6-* models reject function calls in Chat Completions unless their
+    # reasoning is switched off, so OpenAI must get a response format instead.
+    requests = []
+
+    def reply(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        requests.append(body)
+        analysis = {"most_relevant_segments": [], "summary": "Sleep tips.", "key_topics": []}
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-test",
+                "object": "chat.completion",
+                "created": 0,
+                "model": body["model"],
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": json.dumps(analysis)},
+                    }
+                ],
+            },
+        )
+
+    _isolate_llm_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(ai, "_transcript_agent", None)
+    monkeypatch.setattr(ai, "_transcript_agent_signature", None)
+    monkeypatch.setattr(
+        ai,
+        "_build_transcript_model",
+        lambda _config: OpenAIChatModel(
+            "gpt-6-luna",
+            provider=OpenAIProvider(
+                api_key="test-key",
+                http_client=httpx.AsyncClient(transport=httpx.MockTransport(reply)),
+            ),
+        ),
+    )
+    set_config_override(Config())
+    try:
+        result = await ai.get_transcript_agent().run("[00:00 - 00:20] Sleep tips.")
+    finally:
+        set_config_override(None)
+
+    assert result.output.summary == "Sleep tips."
+    assert "tools" not in requests[0]
+    assert requests[0]["response_format"]["type"] == "json_schema"
+    assert "reasoning_effort" not in requests[0]
