@@ -250,8 +250,8 @@ the app via `APP_STORE_ID`/`APP_STORE_URL` in `frontend/src/lib/site.ts`
 (`supoclip-mcp`, Python/FastMCP, stdio) that exposes SupoClip to MCP clients
 (Claude Desktop/Code, Cursor, …). It is a thin client over the REST API.
 
-- **Default target:** the hosted API `https://api.supoclip.com`. Override with
-  `SUPOCLIP_API_URL` for self-hosting (e.g. `http://localhost:8000`).
+- **Default target:** a local backend at `http://localhost:8000`. Set
+  `SUPOCLIP_API_URL` for another deployment (e.g. the hosted `https://api.supoclip.com`).
 - **Auth:** a per-user API key in `SUPOCLIP_API_KEY` (see API keys above).
   Self-hosters may instead use `SUPOCLIP_USER_ID` (+ `SUPOCLIP_AUTH_SECRET` when
   signing is enforced).

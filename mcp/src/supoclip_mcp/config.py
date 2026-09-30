@@ -2,7 +2,7 @@
 Configuration for the SupoClip MCP server.
 
 All settings come from environment variables so the same server binary works
-against the official hosted instance (the default) or any self-hosted backend.
+against a local SupoClip backend (the default) or any other deployment.
 """
 
 from __future__ import annotations
@@ -11,9 +11,9 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-# The official hosted SupoClip API. Override with SUPOCLIP_API_URL to point at
-# a self-hosted backend (e.g. http://localhost:8000).
-DEFAULT_API_URL = "https://api.supoclip.com"
+# A locally running SupoClip backend. Override with SUPOCLIP_API_URL to point
+# at another deployment (e.g. the hosted https://api.supoclip.com).
+DEFAULT_API_URL = "http://localhost:8000"
 
 
 def _clean(value: Optional[str]) -> Optional[str]:

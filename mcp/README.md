@@ -5,9 +5,9 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for
 files uploaded to your SupoClip backend) into short, vertical, subtitled viral
 clips from any MCP client (Claude Desktop, Claude Code, Cursor, etc.).
 
-By default it talks to the **official hosted SupoClip API** at
-`https://api.supoclip.com`. Point it at your own deployment by setting
-`SUPOCLIP_API_URL`.
+By default it talks to a **SupoClip backend on your machine** at
+`http://localhost:8000`. Point it at another deployment (such as the hosted
+`https://api.supoclip.com`) by setting `SUPOCLIP_API_URL`.
 
 ## What it can do
 
@@ -32,7 +32,8 @@ Tools marked ✓ require an API key (or self-host credentials, see below).
 
 ## Getting an API key
 
-1. Sign in at [supoclip.com](https://supoclip.com).
+1. Sign in to your SupoClip web app (`http://localhost:3107` when self-hosted,
+   or [supoclip.com](https://supoclip.com) for the hosted service).
 2. Go to **Settings → API Keys**.
 3. Create a key and copy it (it's shown only once). It looks like `sk_…`.
 
@@ -43,7 +44,7 @@ All configuration is via environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SUPOCLIP_API_KEY` | – | Your API key (recommended auth). |
-| `SUPOCLIP_API_URL` | `https://api.supoclip.com` | Backend base URL. Set for self-hosting. |
+| `SUPOCLIP_API_URL` | `http://localhost:8000` | Backend base URL. Set it for a remote or hosted backend. |
 | `SUPOCLIP_DOWNLOAD_DIR` | `./supoclip-downloads` | Where downloaded/exported clips are written. |
 | `SUPOCLIP_TIMEOUT` | `60` | HTTP timeout (seconds) for non-download requests. |
 | `SUPOCLIP_USER_ID` | – | Self-host only: authenticate by user id (see below). |
@@ -133,7 +134,8 @@ Add to your MCP client config (e.g. `claude_desktop_config.json`, or via
 }
 ```
 
-For a self-hosted backend, add `"SUPOCLIP_API_URL": "http://localhost:8000"` to `env`.
+This targets a backend at `http://localhost:8000`; for another deployment add
+`"SUPOCLIP_API_URL"` to `env` (e.g. `https://api.supoclip.com`).
 
 With Claude Code:
 

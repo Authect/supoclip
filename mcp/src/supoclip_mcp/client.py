@@ -5,7 +5,7 @@ Authentication is resolved from :class:`~supoclip_mcp.config.Settings` and
 supports three modes, tried in priority order:
 
 1. ``api_key``         -> ``Authorization: Bearer <key>`` (recommended; the
-   default for the hosted service).
+   same keys work on self-hosted and hosted backends).
 2. ``signed_headers``  -> the frontend's HMAC scheme, when a user id and the
    backend auth secret are both provided (useful for self-hosting).
 3. ``unsigned_user_id`` -> a bare ``x-supoclip-user-id`` header, for a
