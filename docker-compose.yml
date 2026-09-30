@@ -196,6 +196,8 @@ services:
       - clips:/app/clips
       - ./backend/fonts:/app/fonts
       - ./backend/transitions:/app/transitions
+      # Keep downloaded Whisper models across image rebuilds.
+      - whisper_models:/root/.cache/whisper
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
@@ -307,6 +309,8 @@ volumes:
   postgres_data:
     driver: local
   mcp_downloads:
+    driver: local
+  whisper_models:
     driver: local
 
 networks:

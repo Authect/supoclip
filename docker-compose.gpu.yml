@@ -1,0 +1,15 @@
+# Runs local Whisper transcription (TRANSCRIPTION_PROVIDER=whisper) on an
+# NVIDIA GPU. The worker image's PyTorch is built for CUDA 13, so the host needs
+# an NVIDIA driver from the 580 series or newer, plus Docker Desktop with the
+# WSL 2 backend on Windows, or the NVIDIA Container Toolkit on Linux.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+services:
+  worker:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
